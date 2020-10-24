@@ -1,0 +1,548 @@
+---
+# Brian Gaber
+# LAMP Cloudformation Template
+# To be created:
+# VPC
+# Public and Private Subnets in two AZs so four subnets
+# Route Tables (Public and Private)
+# Five Security Groups (ALB, Web, DB, NAT and Bastion)
+# NAT Instance (source/destination check) or NAT Gateway
+# EC2 Instances - Bastion, webserver, dbserver
+# Perhaps EC2 Key Pair (EC2 key pairs are region based)
+# ALB
+# Auto Scaling
+Parameters:
+  KeyPairName:
+    Description: Name of an existing EC2 KeyPair
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: "[-_ a-zA-Z0-9]*"
+    Type: AWS::EC2::KeyPair::KeyName
+    ConstraintDescription: can contain only alphanumeric characters, spaces, slashes and underscores.
+  VPCName:
+    Description: VPC Name
+    Type: String
+  PublicSubnet1:
+    Description: First Public Subnet Description
+    Type: String
+  PublicSubnet2:
+    Description: Second Public Subnet Description
+    Type: String
+  PrivateSubnet1:
+    Description: First Private Subnet Description
+    Type: String
+  PrivateSubnet2:
+    Description: Second Private Subnet Description
+    Type: String
+  ALBSecurityGroupDescription:
+    Description: ALB Security Group Description
+    Type: String
+  WebSvrSecurityGroupDescription:
+    Description: Web Server Security Group Description
+    Type: String
+  DBSvrSecurityGroupDescription:
+    Description: Database Security Group Description
+    Type: String
+  NATSecurityGroupDescription:
+    Description: NAT Security Group Description
+    Type: String
+  BastionSecurityGroupDescription:
+    Description: Bastion Security Group Description
+    Type: String
+  PublicRouteDescription:
+    Description: Public Route Table Description
+    Type: String
+  PrivateRouteDescription:
+    Description: Private Route Table Description
+    Type: String
+        
+Mappings:
+  SubnetConfig:
+    VPC:
+      CIDR: 10.0.0.0/16
+    Public1:
+      CIDR: 10.0.0.0/24
+    Public2:
+      CIDR: 10.0.1.0/24
+    Private1:
+      CIDR: 10.0.16.0/20
+    Private2:
+      CIDR: 10.0.32.0/20
+# Be careful to use x86 AMI and not Arm.  Using Arm AMI by mistake will cause template to fail.
+  T2MicroRegionMap:
+    ca-central-1:
+      AMI: ami-013d1df4bcea6ba95
+    us-east-1:
+      AMI: ami-123456
+    us-east-2:
+      AMI: ami-07c8bc5c1ce9598c3
+    us-west-1:
+      AMI: ami-123456
+    us-west-2:
+      AMI: ami-123456
+    eu-west-1:
+      AMI: ami-123456
+    eu-central-1:
+      AMI: ami-123456
+    sa-east-1:
+      AMI: ami-123456
+    ap-southeast-1:
+      AMI: ami-123456
+    ap-southeast-2:
+      AMI: ami-123456
+    ap-northeast-1:
+      AMI: ami-123456
+  NatRegionMap:
+    ca-central-1:
+      AMI: ami-02a1ff0e9b1a6d29c
+    us-east-1:
+      AMI: ami-184dc970
+    us-east-2:
+      AMI: ami-00d1f8201864cc10c
+    us-west-1:
+      AMI: ami-a98396ec
+    us-west-2:
+      AMI: ami-290f4119
+    eu-west-1:
+      AMI: ami-14913f63
+    eu-central-1:
+      AMI: ami-ae380eb3
+    sa-east-1:
+      AMI: ami-8122969c
+    ap-southeast-1:
+      AMI: ami-6aa38238
+    ap-southeast-2:
+      AMI: ami-893f53b3
+    ap-northeast-1:
+      AMI: ami-27d6e626
+
+Resources:
+  CustomVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !FindInMap [SubnetConfig, VPC, CIDR]
+      #CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+      - Key: Name
+        Value: !Ref VPCName
+      - Key: Application
+        Value: !Ref AWS::StackName
+  
+  # Create four subnets
+  PubSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: CustomVPC
+      CidrBlock: !FindInMap [SubnetConfig, Public1, CIDR]
+      #CidrBlock: 10.0.0.0/24
+      #AvailabilityZone: "us-east-2a"
+      AvailabilityZone: 
+        Fn::Select: 
+          - 0
+          - Fn::GetAZs: ""
+      Tags:
+      - Key: Name
+        Value: !Ref PublicSubnet1
+  PubSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: CustomVPC
+      CidrBlock: !FindInMap [SubnetConfig, Public2, CIDR]
+      #CidrBlock: 10.0.1.0/24
+      #AvailabilityZone: "us-east-2b"
+      AvailabilityZone: 
+        Fn::Select: 
+          - 1
+          - Fn::GetAZs: ""
+      Tags:
+      - Key: Name
+        Value: !Ref PublicSubnet2
+  PrivSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: CustomVPC
+      CidrBlock: !FindInMap [SubnetConfig, Private1, CIDR]
+      #CidrBlock: 10.0.16.0/20
+      #AvailabilityZone: "us-east-2a"
+      AvailabilityZone: 
+        Fn::Select: 
+          - 0
+          - Fn::GetAZs: ""
+      Tags:
+      - Key: Name
+        Value: !Ref PrivateSubnet1
+  PrivSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Ref: CustomVPC
+      CidrBlock: !FindInMap [SubnetConfig, Private2, CIDR]
+      #CidrBlock: 10.0.32.0/20
+      #AvailabilityZone: "us-east-2b"
+      AvailabilityZone: 
+        Fn::Select: 
+          - 1
+          - Fn::GetAZs: ""
+      Tags:
+      - Key: Name
+        Value: !Ref PrivateSubnet2
+        
+  # Internet Gateway
+  CustomIGW:
+    Type: AWS::EC2::InternetGateway
+    
+  # Attache IGW to VPC
+  AttachGateway:
+    DependsOn:
+    - CustomVPC
+    - CustomIGW
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId:
+        Ref: CustomVPC
+      InternetGatewayId:
+        Ref: CustomIGW
+        
+  # Create two Route Tables (Public and Private)
+  PubRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: CustomVPC
+      Tags:
+      - Key: Name
+        Value: !Ref PublicRouteDescription
+
+  PubSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PubSubnet1
+      RouteTableId:
+        Ref: PubRouteTable
+        
+  PubSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PubSubnet2
+      RouteTableId:
+        Ref: PubRouteTable
+        
+  PubRoute:
+    Type: AWS::EC2::Route
+    DependsOn: CustomIGW
+    Properties:
+       RouteTableId:
+         Ref: PubRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       GatewayId:
+         Ref: CustomIGW
+        
+  PrivRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Ref: CustomVPC
+      Tags:
+      - Key: Name
+        Value: !Ref PrivateRouteDescription
+        
+  PrivSubnetRouteTableAssociation1:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivSubnet1
+      RouteTableId:
+        Ref: PrivRouteTable
+        
+  PrivSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: PrivSubnet2
+      RouteTableId:
+        Ref: PrivRouteTable
+        
+  PrivRoute:
+    Type: AWS::EC2::Route
+    DependsOn: CustomIGW
+    Properties:
+       RouteTableId:
+         Ref: PrivRouteTable
+       DestinationCidrBlock: 0.0.0.0/0
+       InstanceId:
+         Ref: NATinstance
+
+  # Create five security groups
+  # ALB security group
+  ELBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ALB Security Group
+      VpcId:
+         Ref: CustomVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+  # WebServer security group
+  HTTPDSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Webserver Security Group
+      VpcId:
+         Ref: CustomVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId: !Ref ELBSecurityGroup
+      - CidrIp: 10.0.0.0/24
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+      - CidrIp: 10.0.1.0/24
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+  # DBServer security group
+  DBSvrSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Database Security Group
+      VpcId:
+         Ref: CustomVPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 3306
+        ToPort: 3306
+        SourceSecurityGroupId: !Ref HTTPDSecurityGroup
+      - CidrIp: 10.0.0.0/24
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+      - CidrIp: 10.0.1.0/24
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+  # NAT security group
+  NATSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: NAT Security Group
+      VpcId:
+         Ref: CustomVPC
+      SecurityGroupIngress:
+      - CidrIp: 10.0.0.0/16
+        FromPort: 80
+        IpProtocol: tcp
+        ToPort: 80
+      - CidrIp: 10.0.0.0/16
+        FromPort: 443
+        IpProtocol: tcp
+        ToPort: 443
+      - CidrIp: 0.0.0.0/0
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+  # Bastion security group
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Bastion Security Group
+      VpcId:
+         Ref: CustomVPC
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 22
+        IpProtocol: tcp
+        ToPort: 22
+
+  # NAT Instance (source/destination check)
+  NATinstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+    - PubSubnet2
+    - NATSecurityGroup
+    Properties:
+      InstanceType: t2.micro
+      AvailabilityZone: 
+        Fn::Select: 
+          - 1
+          - Fn::GetAZs: ""
+      KeyName: 
+        Ref: KeyPairName
+      SourceDestCheck: false
+      ImageId: !FindInMap [NatRegionMap, !Ref 'AWS::Region', AMI]
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          GroupSet:
+            - Ref: NATSecurityGroup
+          DeviceIndex: 0
+          DeleteOnTermination: true
+          SubnetId:
+            Ref: PubSubnet2
+      Tags:
+        - Key: Name
+          Value: NAT
+      UserData: 
+        Fn::Base64: |
+          #!/bin/bash -xe
+          yum update -y
+          yum install -y yum-cron
+          chkconfig yum-cron on
+
+  # EC2 Instances - Bastion, webserver, dbserver
+  BastionInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+    - PubSubnet1
+    - PubSubnet2
+    - BastionSecurityGroup
+    Properties:
+      InstanceType: t2.micro
+      KeyName: 
+        Ref: KeyPairName
+      ImageId: !FindInMap [T2MicroRegionMap, !Ref 'AWS::Region', AMI]
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: true
+          GroupSet:
+            - Ref: BastionSecurityGroup
+          DeviceIndex: 0
+          DeleteOnTermination: true
+          SubnetId:
+            Ref: PubSubnet1
+#      SecurityGroupIds:
+#        - Ref: BastionSecurityGroup
+#      SubnetId:
+#        Ref: PubSubnet1
+      Tags:
+        - Key: Name
+          Value: Bastion
+      UserData: 
+        Fn::Base64: |
+          #!/bin/bash -xe
+          yum update -y
+          
+  WebServerInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+    - PrivSubnet1
+    - PrivSubnet2
+    - HTTPDSecurityGroup
+    Properties:
+      InstanceType: t2.micro
+      AvailabilityZone: 
+        Fn::Select: 
+          - 0
+          - Fn::GetAZs: ""
+      KeyName: 
+        Ref: KeyPairName
+      ImageId: !FindInMap [T2MicroRegionMap, !Ref 'AWS::Region', AMI]
+      NetworkInterfaces:
+        - AssociatePublicIpAddress: false
+          GroupSet:
+            - Ref: HTTPDSecurityGroup
+          DeviceIndex: 0
+          DeleteOnTermination: true
+          SubnetId:
+            Ref: PrivSubnet1
+      Tags:
+        - Key: Name
+          Value: WebServer
+      UserData: 
+        Fn::Base64: |
+          #!/bin/bash -xe
+          yum update -y
+          yum install -y httpd
+          systemctl start httpd
+          systemctl enable httpd
+          yum install php -y
+          yum install php-mysqlnd -y
+          yum install php-pdo -y
+          yum install php-mbstring -y
+          ID=`curl -s http://169.254.169.254/latest/meta-data/instance-id`
+          AVAIL_ZONE=`curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone`
+          REGION=`curl http://169.254.169.254/latest/dynamic/instance-identity/document|grep region|awk -F\" '{print $4}'`
+          echo "This is Server * $ID * in AWS Region $REGION in AZ $AVAIL_ZONE<br>" > /var/www/html/index.html
+          EC2_AVAIL_ZONE=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
+          echo "<h1>Hello World from $(hostname -f) in AZ $EC2_AVAIL_ZONE </h1><br>" >> /var/www/html/index.html
+  
+  # ALB
+  
+  # Auto Scaling
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Network Configuration"
+        Parameters:
+          - VPCName
+          - PublicSubnet1
+          - PublicSubnet2
+          - PrivateSubnet1
+          - PrivateSubnet2
+          - PublicRouteDescription
+          - PrivateRouteDescription
+      - Label:
+          default: "Security Groups"
+        Parameters:
+          - ALBSecurityGroupDescription
+          - WebSvrSecurityGroupDescription
+          - DBSvrSecurityGroupDescription
+          - NATSecurityGroupDescription
+          - BastionSecurityGroupDescription
+    ParameterLabels:
+      VPCName:
+        default: "What is the name of new VPC?"
+      PublicSubnet1:
+        default: "What is the name of this public subnet?"
+      PublicSubnet2:
+        default: "What is the name of this public subnet?"
+      PrivateSubnet1:
+        default: "What is the name of this private subnet?"
+      PrivateSubnet2:
+        default: "What is the name of this private subnet?"
+      PublicRouteDescription:
+        default: "What is the name of the public route table?"
+      PrivateRouteDescription:
+        default: "What is the name of the private route table?"
+      ALBSecurityGroupDescription:
+        default: "What is the name for the ALB Security Group?"
+      WebSvrSecurityGroupDescription:
+        default: "What is the name for the Web Server Security Group?"
+      DBSvrSecurityGroupDescription:
+        default: "What is the name for the DB Security Group?"
+      NATSecurityGroupDescription:
+        default: "What is the name for the NAT Security Group?"
+      BastionSecurityGroupDescription:
+        default: "What is the name for the Bastion Security Group?"
+      KeyPairName:
+        default: "EC2 Key Pair Name"
+        
+Outputs:
+  VPCID:
+    Description: VPC Information
+    Value: !Ref CustomVPC
+  IGWID:
+    Description: IGW Information
+    Value: !Ref CustomIGW
+  ALBSGID:
+    Description: ALB Security Group Information
+    Value: !Ref ELBSecurityGroup
+  WEBSGID:
+    Description: Web Server Security Group Information
+    Value: !Ref HTTPDSecurityGroup
+  NATID:
+    Description: NAT Instance Information
+    Value: !Ref NATinstance
+  MyStacksRegion:
+    Value: !Ref "AWS::Region"
