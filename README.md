@@ -5,7 +5,9 @@ If stack is created from the console then resources will be created in the regio
 If stack is created from the AWS CLI then the region flag must be used or the stack will be created in the AWS default region (us-east-1).
 Example of creating stack from the AWS CLI:
 aws --region us-east-2 cloudformation create-stack --stack-name myteststack --template-body file://creating-lamp-vpc.json --parameters ParameterKey=KeyPairName,ParameterValue=us-east-2
-This template will only use the first two AZs of a region
+
+This template will only use the first two AZs of a region.
+
 This CloudFormation Template will create:
 - VPC
 - Public and Private Subnets in two AZs so four subnets
