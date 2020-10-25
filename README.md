@@ -15,6 +15,7 @@ This template will only use the first two AZs of a region.
 This CloudFormation Template will create:
 - VPC
 - Public and Private Subnets in two AZs so four subnets
+- Internet Gateway (IGW)
 - Route Tables (Public and Private)
 - Five Security Groups (ALB, Web, DB, NAT and Bastion)
 - NAT Instance (source/destination check) or NAT Gateway
