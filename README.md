@@ -3,6 +3,7 @@
 This CloudFormation Stack can be created from the console or from the AWS CLI.
 If stack is created from the console then resources will be created in the region shown in the upper right.
 If stack is created from the AWS CLI then the region flag must be used or the stack will be created in the AWS default region (us-east-1).
+
 Example of creating stack from the AWS CLI:
 
 aws --region us-east-2 cloudformation create-stack --stack-name myteststack --template-body file://creating-lamp-vpc.json --parameters ParameterKey=KeyPairName,ParameterValue=us-east-2
