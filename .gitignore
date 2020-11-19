@@ -1,3 +1,5 @@
+*.v*.yaml
+*debug*.yaml
 *.php
 *.txt
 *.png

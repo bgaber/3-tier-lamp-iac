@@ -332,10 +332,6 @@ Resources:
         FromPort: 3306
         ToPort: 3306
         SourceSecurityGroupId: !Ref HTTPDSecurityGroup
-      - IpProtocol: -1
-        FromPort: -1
-        ToPort: -1
-        SourceSecurityGroupId: !Ref DBSvrSecurityGroup
       - CidrIp: 10.0.0.0/24
         FromPort: 22
         IpProtocol: tcp
@@ -344,6 +340,14 @@ Resources:
         FromPort: 22
         IpProtocol: tcp
         ToPort: 22
+  DBSvrIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DBSvrSecurityGroup
+      IpProtocol: -1
+      FromPort: -1
+      ToPort: -1
+      SourceSecurityGroupId: !GetAtt DBSvrSecurityGroup.GroupId
   # NAT security group
   NATSecurityGroup:
     Type: AWS::EC2::SecurityGroup
